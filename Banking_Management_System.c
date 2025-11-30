@@ -12,13 +12,13 @@ struct Bank {
     char password[30];
     float balance;
     int checkCode;
-    float checkAmount;
+    float checkAmount; 
 };
 
 struct Bank users[MAX];
 int total = 0;
 
-/* ========= INPUT ========= */
+/* ========= INPUT HELPERS ========= */
 
 void cleanInput() {
     int c;
@@ -59,15 +59,16 @@ void logTransaction(const char *user, const char *action, float amount, const ch
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
 
-    fprintf(fp, "[%02d-%02d-%d %02d:%02d:%02d] %s | %s | Rs %.2f | %s\n",
-        t->tm_mday, t->tm_mon+1, t->tm_year+1900,
+    fprintf(fp,
+        "[%02d-%02d-%d %02d:%02d:%02d] %s | %s | Rs %.2f | %s\n",
+        t->tm_mday, t->tm_mon + 1, t->tm_year + 1900,
         t->tm_hour, t->tm_min, t->tm_sec,
         user, action, amount, extra);
 
     fclose(fp);
 }
 
-/* ========= DECLARATIONS ========= */
+/* ========= FORWARD DECLARATIONS ========= */
 
 void createAccount();
 int login();
@@ -76,40 +77,77 @@ void deposit(int);
 void withdraw(int);
 void issueCheck(int);
 void transfer(int);
+void viewTransactions(const char *username);
+int usernameExists(const char *name);
 
 /* ========= MAIN ========= */
 
 int main() {
     int choice, id;
-    loadData();   
 
-    while(1) {
-        printf("\n--- BANK ---");
+    loadData();
+
+    while (1) {
+        printf("\n--- BANK MANAGEMENT SYSTEM ---");
         printf("\n1. Create Account");
         printf("\n2. Login");
         printf("\n3. Exit");
-        printf("\nChoice: ");
+        printf("\nEnter choice: ");
         scanf("%d", &choice);
         cleanInput();
 
-        switch(choice) {
-            case 1: createAccount(); saveData(); break;
-            case 2: id = login(); if(id != -1) menu(id); break;
-            case 3: saveData(); exit(0);
-            default: printf("Invalid!");
+        switch (choice) {
+            case 1:
+                createAccount();
+                saveData();
+                break;
+            case 2:
+                id = login();
+                if (id != -1) menu(id);
+                break;
+            case 3:
+                saveData();
+                printf("\nExiting... Data saved.\n");
+                exit(0);
+            default:
+                printf("\nInvalid choice!\n");
         }
     }
 }
 
-/* ========= CREATE ACCOUNT ========= */
+/* ========= CHECK IF USERNAME EXISTS ========= */
+
+int usernameExists(const char *name) {
+    for (int i = 0; i < total; i++) {
+        if (strcmp(users[i].username, name) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+/* ========= CREATE ACCOUNT (NO DUPLICATE USERNAME) ========= */
 
 void createAccount() {
-    if (total >= MAX) return;
+    if (total >= MAX) {
+        printf("\nUser limit reached.\n");
+        return;
+    }
 
-    printf("\nUsername: ");
-    getText(users[total].username, 30);
+    char temp[30];
 
-    printf("Password: ");
+    while (1) {
+        printf("\nCreate Username: ");
+        getText(temp, 30);
+
+        if (usernameExists(temp)) {
+            printf("Username already taken. Try another.\n");
+        } else {
+            strcpy(users[total].username, temp);
+            break;
+        }
+    }
+
+    printf("Create Password: ");
     getText(users[total].password, 30);
 
     users[total].balance = 0;
@@ -119,50 +157,112 @@ void createAccount() {
     logTransaction(users[total].username, "ACCOUNT CREATED", 0, "-");
 
     total++;
-    printf("\nAccount created.\n");
+    printf("\nAccount created successfully!\n");
 }
 
-/* ========= LOGIN ========= */
+/* ========= LOGIN (MAX 3 ATTEMPTS) ========= */
 
 int login() {
     char u[30], p[30];
-    printf("\nUsername: "); getText(u,30);
-    printf("Password: "); getText(p,30);
+    int attempts = 0;
 
-    for(int i=0;i<total;i++)
-        if(strcmp(users[i].username,u)==0 &&
-           strcmp(users[i].password,p)==0) {
-            printf("\nLogin OK.\n");
-            return i;
+    while (attempts < 3) {
+        printf("\nUsername: ");
+        getText(u, 30);
+        printf("Password: ");
+        getText(p, 30);
+
+        for (int i = 0; i < total; i++) {
+            if (strcmp(users[i].username, u) == 0 &&
+                strcmp(users[i].password, p) == 0) {
+                printf("\nLogin successful.\n");
+                logTransaction(users[i].username, "LOGIN SUCCESS", 0, "-");
+                return i;
+            }
         }
 
-    printf("\nWrong login.\n");
+        attempts++;
+        printf("\nInvalid credentials. Attempts left: %d\n", 3 - attempts);
+        logTransaction(u, "LOGIN FAILED", 0, "WRONG CREDENTIALS");
+    }
+
+    printf("\nToo many failed attempts. Returning to main menu.\n");
     return -1;
+}
+
+/* ========= VIEW USER'S TRANSACTIONS ========= */
+
+void viewTransactions(const char *username) {
+    FILE *fp = fopen(LOG_FILE, "r");
+    if (!fp) {
+        printf("\nNo transaction log found.\n");
+        return;
+    }
+
+    char line[256];
+    int found = 0;
+
+    printf("\n--- TRANSACTION HISTORY for %s ---\n", username);
+
+    while (fgets(line, sizeof(line), fp)) {
+        // Check if the line contains the username
+        if (strstr(line, username) != NULL) {
+            printf("%s", line);
+            found = 1;
+        }
+    }
+
+    if (!found)
+        printf("No transactions for this account yet.\n");
+
+    fclose(fp);
 }
 
 /* ========= MENU ========= */
 
 void menu(int id) {
     int ch;
-    while(1) {
-        printf("\n--- MENU ---");
-        printf("\n1. Balance");
+
+    while (1) {
+        printf("\n--- ACCOUNT MENU ---");
+        printf("\n1. Check Balance");
         printf("\n2. Deposit");
         printf("\n3. Withdraw");
         printf("\n4. Issue Check");
         printf("\n5. Transfer");
-        printf("\n6. Logout");
+        printf("\n6. View My Transactions");
+        printf("\n7. Logout");
         printf("\nSelect: ");
-        scanf("%d",&ch);
+        scanf("%d", &ch);
         cleanInput();
 
-        switch(ch) {
-            case 1: printf("Balance: %.2f\n", users[id].balance); break;
-            case 2: deposit(id); saveData(); break;
-            case 3: withdraw(id); saveData(); break;
-            case 4: issueCheck(id); saveData(); break;
-            case 5: transfer(id); saveData(); break;
-            case 6: return;
+        switch (ch) {
+            case 1:
+                printf("\nCurrent Balance: Rs %.2f\n", users[id].balance);
+                break;
+            case 2:
+                deposit(id);
+                saveData();
+                break;
+            case 3:
+                withdraw(id);
+                saveData();
+                break;
+            case 4:
+                issueCheck(id);
+                saveData();
+                break;
+            case 5:
+                transfer(id);
+                saveData();
+                break;
+            case 6:
+                viewTransactions(users[id].username);
+                break;
+            case 7:
+                return;
+            default:
+                printf("\nInvalid option.\n");
         }
     }
 }
@@ -173,37 +273,47 @@ void deposit(int id) {
     int type, code;
     float amt;
 
-    printf("\n1. Cash\n2. Check\nChoice: ");
-    scanf("%d",&type); cleanInput();
+    printf("\nDeposit Method");
+    printf("\n1. Cash");
+    printf("\n2. Check");
+    printf("\nChoice: ");
+    scanf("%d", &type);
+    cleanInput();
 
-    if(type == 1) {
+    if (type == 1) {
         printf("Amount: ");
-        scanf("%f",&amt); cleanInput();
-        users[id].balance += amt;
-        logTransaction(users[id].username,"CASH DEPOSIT",amt,"-");
-    }
-    else if(type == 2) {
-        printf("Check code: ");
-        scanf("%d",&code); cleanInput();
+        scanf("%f", &amt);
+        cleanInput();
 
-        for(int i=0;i<total;i++) {
-            if(users[i].checkCode == code) {
+        users[id].balance += amt;
+        logTransaction(users[id].username, "CASH DEPOSIT", amt, "-");
+        printf("\nDeposit successful.\n");
+    }
+    else if (type == 2) {
+        printf("Check code: ");
+        scanf("%d", &code);
+        cleanInput();
+
+        for (int i = 0; i < total; i++) {
+            if (users[i].checkCode == code && users[i].checkAmount > 0) {
                 users[id].balance += users[i].checkAmount;
 
                 char info[60];
                 sprintf(info, "FROM %s", users[i].username);
-                logTransaction(users[id].username,
-                    "CHECK DEPOSIT",
-                    users[i].checkAmount,
-                    info);
+                logTransaction(users[id].username, "CHECK DEPOSIT",
+                               users[i].checkAmount, info);
 
                 users[i].checkCode = 0;
                 users[i].checkAmount = 0;
-                printf("\nCheck cleared.\n");
+
+                printf("\nCheck cleared and amount added.\n");
                 return;
             }
         }
-        printf("\nInvalid check.\n");
+        printf("\nInvalid or already used check code.\n");
+    }
+    else {
+        printf("\nInvalid deposit type.\n");
     }
 }
 
@@ -211,17 +321,18 @@ void deposit(int id) {
 
 void withdraw(int id) {
     float amt;
-    printf("Withdraw: ");
-    scanf("%f",&amt); cleanInput();
+    printf("Withdraw amount: ");
+    scanf("%f", &amt);
+    cleanInput();
 
-    if(amt > users[id].balance) {
-        logTransaction(users[id].username,"FAILED WITHDRAW",amt,"INSUFFICIENT");
-        printf("Low balance.\n");
+    if (amt > users[id].balance) {
+        printf("\nInsufficient funds.\n");
+        logTransaction(users[id].username, "FAILED WITHDRAW", amt, "LOW            BALANCE");
     }
     else {
         users[id].balance -= amt;
-        logTransaction(users[id].username,"WITHDRAW",amt,"-");
-        printf("Done.\n");
+        logTransaction(users[id].username, "WITHDRAW", amt, "-");
+        printf("\nWithdrawal successful.\n");
     }
 }
 
@@ -229,14 +340,15 @@ void withdraw(int id) {
 
 void issueCheck(int id) {
     float amt;
-    int code = rand()%9000 + 1000;
+    int code = rand() % 9000 + 1000;
 
-    printf("Amount: ");
-    scanf("%f",&amt); cleanInput();
+    printf("Enter check amount: ");
+    scanf("%f", &amt);
+    cleanInput();
 
-    if(amt > users[id].balance) {
-        logTransaction(users[id].username,"CHECK FAILED",amt,"LOW BALANCE");
-        printf("Not enough.\n");
+    if (amt > users[id].balance) {
+        printf("\nNot enough balance to issue check.\n");
+        logTransaction(users[id].username, "CHECK FAILED", amt, "LOW BALANCE");
         return;
     }
 
@@ -244,8 +356,8 @@ void issueCheck(int id) {
     users[id].checkCode = code;
     users[id].checkAmount = amt;
 
-    logTransaction(users[id].username,"CHECK ISSUED",amt,"-");
-    printf("Check Code: %d\n",code);
+    logTransaction(users[id].username, "CHECK ISSUED", amt, "-");
+    printf("\nCheck issued. Code: %d\n", code);
 }
 
 /* ========= TRANSFER ========= */
@@ -255,22 +367,28 @@ void transfer(int id) {
     float amt;
     int found = -1;
 
-    printf("Send to: ");
-    getText(to,30);
+    printf("Receiver username: ");
+    getText(to, 30);
 
-    for(int i=0;i<total;i++)
-        if(strcmp(users[i].username,to)==0) {
-            found=i; break;
+    for (int i = 0; i < total; i++) {
+        if (strcmp(users[i].username, to) == 0) {
+            found = i;
+            break;
         }
+    }
 
-    if(found == -1) return;
+    if (found == -1) {
+        printf("\nUser not found.\n");
+        return;
+    }
 
-    printf("Amount: ");
-    scanf("%f",&amt); cleanInput();
+    printf("Amount to transfer: ");
+    scanf("%f", &amt);
+    cleanInput();
 
-    if(amt > users[id].balance) {
-        logTransaction(users[id].username,"TRANSFER FAILED",amt,"INSUFFICIENT");
-        printf("Not enough.\n");
+    if (amt > users[id].balance) {
+        printf("\nInsufficient balance to transfer.\n");
+        logTransaction(users[id].username, "TRANSFER FAILED", amt, "LOW BALANCE");
     }
     else {
         users[id].balance -= amt;
@@ -278,9 +396,8 @@ void transfer(int id) {
 
         char info[60];
         sprintf(info, "TO %s", users[found].username);
+        logTransaction(users[id].username, "TRANSFER", amt, info);
 
-        logTransaction(users[id].username,"TRANSFER",amt,info);
-
-        printf("Transferred.\n");
+        printf("\nTransfer completed.\n");
     }
 }
